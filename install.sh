@@ -15,6 +15,8 @@ install_ucode_intel='' # intel cpu ucode, leave empty for `no`
 
 minimal_install='' # minimal install, used for debugging, leave empty for `no`
 
+# you want the `arch-install-scripts` package installed
+
 # resources
 #
 # raid0 mdadm
@@ -26,7 +28,10 @@ minimal_install='' # minimal install, used for debugging, leave empty for `no`
 #BOOT_PARTITION_SIZE=512MiB
 BOOT_PARTITION_SIZE=1GiB
 
-DISTRO_NAME=SEXlinux
+DISTRO_NAME=SEXlinux$RANDOM
+
+SWAP_FILE=/swapfile$RANDOM
+
 INSTALL_LOG_FILE=/install-error-log
 
 HERE=$(dirname -- "$BASH_SOURCE")
@@ -39,8 +44,29 @@ on_exit(){
 	log "synced"
 	sync
 
-	umount /mnt/boot/efi || true
-	umount /mnt || true
+	test $ret_code != 0 && {
+
+		echo "press ctrl+c to not clear disks"
+		read tmp
+
+		sudo umount /mnt/boot/efi || true
+		sudo umount /mnt || true
+
+		test "$lvm_group" != "" && {
+			# deal with LVM
+			sudo vgremove --force myVolGr $lvm_group || true
+		}
+
+		test "$mdadm_device" != "" && {
+			# deal with mdadm
+			sudo mdadm --stop $mdadm_device || true
+			sudo mdadm --zero-superblock $data_partitions || true
+		}
+
+	}
+
+	sudo umount /mnt/boot/efi || true
+	sudo umount /mnt || true
 
 	echo "Check \`$INSTALL_LOG_FILE\` for the install logs"
 
@@ -52,7 +78,7 @@ trap on_exit EXIT
 ########## generic fncs
 
 chroot_run(){
-	arch-chroot /mnt "$@"
+	sudo arch-chroot /mnt "$@"
 }
 
 pkg_install(){
@@ -60,12 +86,13 @@ pkg_install(){
 }
 
 aur_install(){
+	# TODO this asks for passwd when running as non-root
 	(cat << EOF
 set -e
+set -o xtrace
 su me
-echo "${user_password}" | sudo -S echo gaysex
+echo "$user_password" | sudo -S echo gaysex
 paru --noconfirm -S --needed $@
-exit
 EOF
 	) | chroot_run bash || {
 		log "failed to install AUR package(s) \`$@\`"
@@ -85,17 +112,21 @@ get_block_device(){
 	allow_none="$2"
 	already_used_block_devices="$3"
 
+	# TODO using a hack that prints to stderr
+
 	while true; do
 
-		lsblk
+		>&2 echo
+		>&2 lsblk
+		>&2 echo
 
-		printf "$prompt\n"
+		>&2 printf "$prompt"
 
 		test "$allow_none" == "1" && {
-			printf " (leave empty for none)"
+			>&2 printf " (leave empty for none)"
 		}
 
-		printf "\n> "
+		>&2 printf "\n> "
 
 		read block_device
 
@@ -103,22 +134,27 @@ get_block_device(){
 			test "$allow_none" == "1" && {
 				return
 			}
-			echo 'invalid input: empty line'
+			>&2 echo 'invalid input: empty line'
 			continue
 		fi
 
 		# check of block device exists
 		test -b ${block_device} || {
-			echo "invalid input: block device doesn't exist: \`$block_device\`"
+			>&2 echo "invalid input: block device doesn't exist: \`$block_device\`"
+			>&2 echo 'press enter'
+			read tmp
 			continue
 		}
 
 		# check if device already used
 		if [[ "$already_used_block_devices" == *" $block_device "* ]]; then
-			echo "invalid input: device already used: \`$block_device\`"
+			>&2 echo "invalid input: device already used: \`$block_device\`"
+			>&2 echo 'press enter'
+			read tmp
 			continue
 		fi
 
+		echo "$block_device"
 		return
 
 	done
@@ -231,14 +267,6 @@ config_visudo(){
 
 ########## main
 
-lsblk
-echo 'You might want to clear previous installations'
-echo 'Example:'
-echo '    LVM: `vgremove --force myVolGr`'
-echo '    mdadm: `mdadm --stop /dev/md0 ; mdadm --zero-superblock /dev/sda2`'
-echo 'Press enter or ctrl+c'
-read tmp
-
 # LVM JBOD or LVM RAID0 or mdadm RAID0
 
 lvcreate_striped_flags=''
@@ -276,14 +304,12 @@ fi
 
 number_of_disks=1
 
-boot_disk=$(get_block_device 0 'Enter boot disk (example: /dev/sda)' "")
+boot_disk=$(get_block_device 'Enter boot disk (example: /dev/sda)' 0 '')
 
 # let user select additional disks
 additional_disks=""
 while true; do
-	printf ' (leave empty to end): \n> '
-
-	disk=$(get_block_device 1 'Enter additional disks (example: /dev/sdb)' "$boot_disk $additional_disks")
+	disk=$(get_block_device 'Enter additional disks (example: /dev/sdb)' 1 "$boot_disk $additional_disks")
 	test -z "${disk}" && break
 
 	additional_disks="${additional_disks} ${disk}"
@@ -295,92 +321,77 @@ set -o xtrace
 # you can disable this with `set +o xtrace`
 
 # format boot disk
-parted -s ${boot_disk} mklabel gpt
+sudo parted -s ${boot_disk} mklabel gpt
 
-parted -s ${boot_disk} mkpart primary fat32 0% $BOOT_PARTITION_SIZE
-parted -s ${boot_disk} set 1 esp on
+sudo parted -s ${boot_disk} mkpart primary fat32 0% $BOOT_PARTITION_SIZE
+sudo parted -s ${boot_disk} set 1 esp on
 
-parted -s ${boot_disk} mkpart primary ext4 $BOOT_PARTITION_SIZE 100%
-parted -s ${boot_disk} set 2 $data_part_type on
+sudo parted -s ${boot_disk} mkpart primary ext4 $BOOT_PARTITION_SIZE 100%
+sudo parted -s ${boot_disk} set 2 $data_part_type on
 
 # format other disks
 for disk in ${additional_disks}; do
-	parted -s ${disk} mklabel gpt
-	parted -s ${disk} mkpart primary ext4 0% 100%
-	parted -s ${disk} set 1 $data_part_type on
+	sudo parted -s ${disk} mklabel gpt
+	sudo parted -s ${disk} mkpart primary ext4 0% 100%
+	sudo parted -s ${disk} set 1 $data_part_type on
 done
 
 boot_partition=${boot_disk}1
 # TODO if use is using SSD this will be `}p1` and not just `}1`
 # same goes for the line on the bottom
 
-data_partitions=${boot_disk}2
+export data_partitions=${boot_disk}2
 for disk in ${additional_disks}; do
-	data_partitions="${data_partitions} ${disk}1"
+	export data_partitions="${data_partitions} ${disk}1"
 done
 
 # format boot part
-mkfs.fat -F32 ${boot_partition}
+sudo mkfs.fat -F32 ${boot_partition}
 
 if [ $use_lvm == 1 ]; then
+
+	export lvm_group=myVolGr
 
 	# activate
 	for part in ${data_partitions}; do
 		pvcreate ${part}
 	done
 
-	# check if everything is OK
-	pvs
-
-	vgcreate myVolGr ${data_partitions}
-
-	# check
-	vgs
-
-	# activate the volume group (wtf does this event do anything?)
-	# this might be useless
-	#vgchange -a y myVolGr
-	# TODO testing removing this, will have to revert it if it actually breaks things
+	vgcreate $lvm_group ${data_partitions}
 
 	# create logical volume
-	lvcreate --yes -l 100%FREE myVolGr -n myRootVol ${lvcreate_striped_flags}
-
-	# activate the volume group (wtf does this event do anything?)
-	#vgchange -a y myVolGr
-	# TODO testing removing this, will have to revert it if it actually breaks things
-
-	# check
-	lvs
+	lvcreate --yes -l 100%FREE $lvm_group -n myRootVol ${lvcreate_striped_flags}
 
 	# format
-	mkfs.ext4 -F /dev/mapper/myVolGr-myRootVol
+	mkfs.ext4 -F /dev/mapper/${lvm_group}-myRootVol
 		# `-F` so that there are no confirmation prompts from the user
 
-	mount /dev/mapper/myVolGr-myRootVol /mnt
+	mount /dev/mapper/${lvm_group}-myRootVol /mnt
 
 else # mdadm
 
-	# TODO make it so that it does not ask for confirmation
-	mdadm -Cv /dev/md0 -l0 -n$number_of_disks $data_partitions
+	export mdadm_device=/dev/md0
 
-	parted -s /dev/md0 mklabel gpt
+	sudo mdadm -Cv -R $mdadm_device -l0 -n$number_of_disks $data_partitions
+		# `-R` supresses confirmation prompt
 
-	parted -s /dev/md0 mkpart primary ext4 0% 100%
-	mkfs.ext4 -F /dev/md0p1
-		# `-F` so that there are no confirmation prompts from the user
+	sudo parted -s $mdadm_device mklabel gpt
 
-	mount /dev/md0p1 /mnt
+	sudo parted -s $mdadm_device mkpart primary ext4 0% 100%
+	sudo mkfs.ext4 -F ${mdadm_device}p1 # `-F` so that there are no confirmation prompts from the user
+
+	sudo mount ${mdadm_device}p1 /mnt
 
 fi
 
-mkdir -p /mnt/boot/efi
-mount ${boot_partition} /mnt/boot/efi
+sudo mkdir -p /mnt/boot/efi
+sudo mount ${boot_partition} /mnt/boot/efi
 
-mkdir /mnt/etc
+sudo mkdir /mnt/etc
 
-genfstab -U -p /mnt >> /mnt/etc/fstab
+sudo bash -c 'genfstab -U -p /mnt >> /mnt/etc/fstab'
 
-pacstrap /mnt base
+sudo pacstrap /mnt base
 
 log "starting installation"
 
@@ -393,12 +404,13 @@ pkg_install mdadm # needed only for mdadm
 # swap
 (cat << EOF
 set -e
-fallocate -l "$swap_amount" /swapfile
-chmod 0600 /swapfile
-mkswap -U clear /swapfile
-swapon /swapfile
-echo -e '\n/swapfile none swap defaults 0 0' >> /etc/fstab
-swapoff /swapfile
+set -o xtrace
+fallocate -l $swap_amount $SWAP_FILE
+chmod 0600 $SWAP_FILE
+mkswap -U clear $SWAP_FILE
+swapon $SWAP_FILE
+swapoff $SWAP_FILE
+echo -e '\n$SWAP_FILE none swap defaults 0 0' >> /etc/fstab
 EOF
 ) | chroot_run bash
 
@@ -407,7 +419,7 @@ chroot_run systemctl enable NetworkManager
 pkg_install wpa_supplicant wireless_tools netctl
 
 if [ $use_mdadm == 1 ]; then
-	mdadm --detail --scan --verbose >> /mnt/etc/mdadm.conf
+	sudo bash -c 'mdadm --detail --scan --verbose >> /mnt/etc/mdadm.conf'
 fi
 
 edit_mkinitcpio
