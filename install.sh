@@ -1,5 +1,20 @@
 #! /usr/bin/env bash
 
+set -e
+
+user_password=123
+
+swap_amount=64G
+
+use_amd='' # amd video drivers, leave empty for `no`
+use_nvidia='' # nvidia video drivers, leave empty for `no`
+use_intel='' # intel video drivers, leave empty for `no`
+
+install_ucode_amd='' # amd cpu ucode, leave empty for `no`
+install_ucode_intel='' # intel cpu ucode, leave empty for `no`
+
+minimal_install='' # minimal install, used for debugging, leave empty for `no`
+
 # resources
 #
 # raid0 mdadm
@@ -7,13 +22,14 @@
 # https://blog.bjdean.id.au/2020/10/md-software-raid-and-lvm-logical-volume-management/#pvcreate
 # (most important, almost solved my problem singlehandedly) https://www.serveradminz.com/blog/installation-of-arch-linux-using-software-raid/
 
-set -e
-# exit on error
+# TODO wtf cancer shit, try and use 512 if possible
+#BOOT_PARTITION_SIZE=512MiB
+BOOT_PARTITION_SIZE=1GiB
 
 DISTRO_NAME=SEXlinux
 INSTALL_LOG_FILE=/install-error-log
 
-HERE=$(dirname "$BASH_SOURCE")
+HERE=$(dirname -- "$BASH_SOURCE")
 
 on_exit(){
 	ret_code="$?"
@@ -23,46 +39,17 @@ on_exit(){
 	log "synced"
 	sync
 
-	if [ "$ret_code" != 0 ]; then
-		echo "an error has been encountered; press ctrl+c to enter debug"
-		read tmp
-	fi
-
-	clear_used_storage_devices $ret_code
+	umount /mnt/boot/efi || true
+	umount /mnt || true
 
 	echo "Check \`$INSTALL_LOG_FILE\` for the install logs"
 
 	exit ${ret_code}
 }
 
-clear_used_storage_devices(){
-	delete="$1"
-
-	# TODO we should also pass `data_partitions` here cuz it seems like its not working
-
-	umount /mnt/boot/efi || true
-	umount /mnt || true
-
-	if [ "$delete" != 0 ]; then
-		vgremove --force myVolGr || true
-
-		# TODo hardcoded
-		mdadm --stop /dev/md0 || true
-
-		for part in $data_partitions ; do
-			mdadm --zero-superblock $part || true
-		done
-
-		# TODO shit hardcoded solution, make the other solution work somehow
-		for part in /dev/sda2 /dev/sdb1 /dev/sdc1 ; do
-			mdadm --zero-superblock $part || true
-		done
-	fi
-}
-
 trap on_exit EXIT
 
-# generic fncs
+########## generic fncs
 
 chroot_run(){
 	arch-chroot /mnt "$@"
@@ -91,7 +78,53 @@ log(){
 	}
 }
 
-# specific fncs
+########## not so generic fncs
+
+get_block_device(){
+	prompt="$1"
+	allow_none="$2"
+	already_used_block_devices="$3"
+
+	while true; do
+
+		lsblk
+
+		printf "$prompt\n"
+
+		test "$allow_none" == "1" && {
+			printf " (leave empty for none)"
+		}
+
+		printf "\n> "
+
+		read block_device
+
+		if [ "$block_device" == "" ]; then
+			test "$allow_none" == "1" && {
+				return
+			}
+			echo 'invalid input: empty line'
+			continue
+		fi
+
+		# check of block device exists
+		test -b ${block_device} || {
+			echo "invalid input: block device doesn't exist: \`$block_device\`"
+			continue
+		}
+
+		# check if device already used
+		if [[ "$already_used_block_devices" == *" $block_device "* ]]; then
+			echo "invalid input: device already used: \`$block_device\`"
+			continue
+		fi
+
+		return
+
+	done
+}
+
+########## file editing
 
 edit_mkinitcpio(){
 	# dependencies
@@ -196,43 +229,15 @@ config_visudo(){
 	# we could also try using `/etc/sudoers.d` (it's the very last line in the `visudo` file)
 }
 
-# main
+########## main
 
-# TODO wtf cancer shit, try and use 512 if possible
-#BOOT_PARTITION_SIZE=512MiB
-BOOT_PARTITION_SIZE=1GiB
-
-# get password
-printf 'Enter password: \n> '
-read user_password
-
-# swap
-printf 'Enter swap amount (example: 64G)\n> '
-read swap_amount
-
-# amd drivers
-printf 'Install AMD drivers? Leave line empty for `no`:\n> '
-read use_amd
-
-# nvidia drivers
-printf 'Install nvidia drivers? Leave line empty for `no`:\n> '
-read use_nvidia
-
-# intel drivers
-printf 'Install intel drivers? Leave line empty for `no`:\n> '
-read use_intel
-
-# ucode amd
-printf 'Install AMD CPU ucode? Leave line empty for `no`:\n> '
-read install_ucode_amd
-
-# ucode intel
-printf 'Install intel CPU ucode? Leave line empty for `no`:\n> '
-read install_ucode_intel
-
-# minimal install, used for debugging
-printf 'Use minimal install? Leave line empty for `no`:\n> '
-read minimal_install
+lsblk
+echo 'You might want to clear previous installations'
+echo 'Example:'
+echo '    LVM: `vgremove --force myVolGr`'
+echo '    mdadm: `mdadm --stop /dev/md0 ; mdadm --zero-superblock /dev/sda2`'
+echo 'Press enter or ctrl+c'
+read tmp
 
 # LVM JBOD or LVM RAID0 or mdadm RAID0
 
@@ -271,35 +276,23 @@ fi
 
 number_of_disks=1
 
-# let user select boot disk
-lsblk
-printf "Enter boot disk (example: /dev/sda): \n> "
-read boot_disk
-echo "checking if device exists"
-test -b ${boot_disk}
-	# `-b` is for block device
+boot_disk=$(get_block_device 0 'Enter boot disk (example: /dev/sda)' "")
 
 # let user select additional disks
 additional_disks=""
 while true; do
-	lsblk
-	printf 'Enter additional disks (example: /dev/sdb) (leave empty to end): \n> '
-	read disk
+	printf ' (leave empty to end): \n> '
+
+	disk=$(get_block_device 1 'Enter additional disks (example: /dev/sdb)' "$boot_disk $additional_disks")
 	test -z "${disk}" && break
-	echo "checking if device exists"
-	test -b ${disk}
+
 	additional_disks="${additional_disks} ${disk}"
 	let 'number_of_disks+=1'
 done
-#additional_disks=$("$HERE"/select_devices $boot_disk)
-# TODO ^^^^^ reaplce the section with this
-# 	when the `additional_disks` problem is resolved
 
 # enable debug output from now on
 set -o xtrace
 # you can disable this with `set +o xtrace`
-
-clear_used_storage_devices 1
 
 # format boot disk
 parted -s ${boot_disk} mklabel gpt
@@ -653,10 +646,14 @@ pkg_install bzip2 gzip p7zip tar unrar unzip xz zip zstd # some formats
 pkg_install steam
 pkg_install lib32-libappindicator-gtk2 # makes it so that the taskbar menu follows the system theme; does not always work
 
-pkg_install syncthing
-# TODO
-    # if not LAPTOP:
-    #     service_start_and_enable(f'syncthing@{USERNAME}')
+# file sync
+
+	pkg_install syncthing
+	# TODO
+		# if not LAPTOP:
+		#     service_start_and_enable(f'syncthing@{USERNAME}')
+
+	pkg_install unison
 
 # power manager
 # TODO
