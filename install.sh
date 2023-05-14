@@ -6,14 +6,16 @@ user_password=123
 
 swap_amount=64G
 
-use_amd='' # amd video drivers, leave empty for `no`
+use_amd='1' # amd video drivers, leave empty for `no`
 use_nvidia='' # nvidia video drivers, leave empty for `no`
 use_intel='' # intel video drivers, leave empty for `no`
 
-install_ucode_amd='' # amd cpu ucode, leave empty for `no`
+install_ucode_amd='1' # amd cpu ucode, leave empty for `no`
 install_ucode_intel='' # intel cpu ucode, leave empty for `no`
 
 minimal_install='' # minimal install, used for debugging, leave empty for `no`
+
+DISTRO_NAME=SEXlinux$RANDOM
 
 # you want the `arch-install-scripts` package installed
 
@@ -27,8 +29,6 @@ minimal_install='' # minimal install, used for debugging, leave empty for `no`
 # TODO wtf cancer shit, try and use 512 if possible
 #BOOT_PARTITION_SIZE=512MiB
 BOOT_PARTITION_SIZE=1GiB
-
-DISTRO_NAME=SEXlinux$RANDOM
 
 SWAP_FILE=/swapfile$RANDOM
 
@@ -49,24 +49,24 @@ on_exit(){
 		echo "press ctrl+c to not clear disks"
 		read tmp
 
-		sudo umount /mnt/boot/efi || true
-		sudo umount /mnt || true
+		umount /mnt/boot/efi || true
+		umount /mnt || true
 
 		test "$lvm_group" != "" && {
 			# deal with LVM
-			sudo vgremove --force myVolGr $lvm_group || true
+			vgremove --force myVolGr $lvm_group || true
 		}
 
 		test "$mdadm_device" != "" && {
 			# deal with mdadm
-			sudo mdadm --stop $mdadm_device || true
-			sudo mdadm --zero-superblock $data_partitions || true
+			mdadm --stop $mdadm_device || true
+			mdadm --zero-superblock $data_partitions || true
 		}
 
 	}
 
-	sudo umount /mnt/boot/efi || true
-	sudo umount /mnt || true
+	umount /mnt/boot/efi || true
+	umount /mnt || true
 
 	echo "Check \`$INSTALL_LOG_FILE\` for the install logs"
 
@@ -78,7 +78,7 @@ trap on_exit EXIT
 ########## generic fncs
 
 chroot_run(){
-	sudo arch-chroot /mnt "$@"
+	arch-chroot /mnt "$@"
 }
 
 pkg_install(){
@@ -90,9 +90,13 @@ aur_install(){
 	(cat << EOF
 set -e
 set -o xtrace
-su me
+su me -c bash
+set -e
+set -o xtrace
 echo "$user_password" | sudo -S echo gaysex
-paru --noconfirm -S --needed $@
+#echo "$user_password" | sudo -S -v
+paru --sudoloop --noconfirm -S --needed $@
+#echo "$user_password" | paru --sudoloop --noconfirm -S --needed $@
 EOF
 	) | chroot_run bash || {
 		log "failed to install AUR package(s) \`$@\`"
@@ -242,7 +246,7 @@ set_up_aur_helper(){
 set -e
 paru --version && exit
 cd /tmp
-su me
+su me -c bash
 git clone https://aur.archlinux.org/paru-bin.git
 cd ./paru-bin
 makepkg
@@ -321,19 +325,19 @@ set -o xtrace
 # you can disable this with `set +o xtrace`
 
 # format boot disk
-sudo parted -s ${boot_disk} mklabel gpt
+parted -s ${boot_disk} mklabel gpt
 
-sudo parted -s ${boot_disk} mkpart primary fat32 0% $BOOT_PARTITION_SIZE
-sudo parted -s ${boot_disk} set 1 esp on
+parted -s ${boot_disk} mkpart primary fat32 0% $BOOT_PARTITION_SIZE
+parted -s ${boot_disk} set 1 esp on
 
-sudo parted -s ${boot_disk} mkpart primary ext4 $BOOT_PARTITION_SIZE 100%
-sudo parted -s ${boot_disk} set 2 $data_part_type on
+parted -s ${boot_disk} mkpart primary ext4 $BOOT_PARTITION_SIZE 100%
+parted -s ${boot_disk} set 2 $data_part_type on
 
 # format other disks
 for disk in ${additional_disks}; do
-	sudo parted -s ${disk} mklabel gpt
-	sudo parted -s ${disk} mkpart primary ext4 0% 100%
-	sudo parted -s ${disk} set 1 $data_part_type on
+	parted -s ${disk} mklabel gpt
+	parted -s ${disk} mkpart primary ext4 0% 100%
+	parted -s ${disk} set 1 $data_part_type on
 done
 
 boot_partition=${boot_disk}1
@@ -346,7 +350,7 @@ for disk in ${additional_disks}; do
 done
 
 # format boot part
-sudo mkfs.fat -F32 ${boot_partition}
+mkfs.fat -F32 ${boot_partition}
 
 if [ $use_lvm == 1 ]; then
 
@@ -372,26 +376,31 @@ else # mdadm
 
 	export mdadm_device=/dev/md0
 
-	sudo mdadm -Cv -R $mdadm_device -l0 -n$number_of_disks $data_partitions
+	mdadm -Cv -R $mdadm_device -l0 -n$number_of_disks $data_partitions
 		# `-R` supresses confirmation prompt
 
-	sudo parted -s $mdadm_device mklabel gpt
+	parted -s $mdadm_device mklabel gpt
 
-	sudo parted -s $mdadm_device mkpart primary ext4 0% 100%
-	sudo mkfs.ext4 -F ${mdadm_device}p1 # `-F` so that there are no confirmation prompts from the user
+	parted -s $mdadm_device mkpart primary ext4 0% 100%
+	mkfs.ext4 -F ${mdadm_device}p1 # `-F` so that there are no confirmation prompts from the user
 
-	sudo mount ${mdadm_device}p1 /mnt
+	mount ${mdadm_device}p1 /mnt
 
 fi
 
-sudo mkdir -p /mnt/boot/efi
-sudo mount ${boot_partition} /mnt/boot/efi
+mkdir -p /mnt/boot/efi
+mount ${boot_partition} /mnt/boot/efi
 
-sudo mkdir /mnt/etc
+mkdir /mnt/etc
 
-sudo bash -c 'genfstab -U -p /mnt >> /mnt/etc/fstab'
+genfstab -U -p /mnt >> /mnt/etc/fstab
+# if [ "$use_mdadm" != "" ]; then
+# 	# TODO this should be automated
+# 	pacman -S --needed micro
+# 	micro /mnt/etc/fstab
+# fi
 
-sudo pacstrap /mnt base
+pacstrap /mnt base
 
 log "starting installation"
 
@@ -418,8 +427,8 @@ chroot_run systemctl enable NetworkManager
 # also install some wifi tools
 pkg_install wpa_supplicant wireless_tools netctl
 
-if [ $use_mdadm == 1 ]; then
-	sudo bash -c 'mdadm --detail --scan --verbose >> /mnt/etc/mdadm.conf'
+if [ "$use_mdadm" == "1" ]; then
+	mdadm --detail --scan --verbose >> /mnt/etc/mdadm.conf
 fi
 
 edit_mkinitcpio
@@ -471,6 +480,10 @@ pkg_install grub efibootmgr dosfstools os-prober mtools openssh
 	# to GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 cryptdevice=/dev/sdb2:myVolGr:allow-discards"
 	#
 	# uncomment "#GRUB_ENABLE_CRYPTODISK=y"
+
+aur_install downgrade
+chroot_run downgrade --version # make sure it's installed
+#chroot_run downgrade --ala-only --ignore always grub=2:2.06.r456.g65bc45963-1
 
 # install grub
 chroot_run grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="$DISTRO_NAME" --recheck
