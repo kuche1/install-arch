@@ -271,6 +271,13 @@ config_visudo(){
 
 ########## main
 
+# check fi root
+
+if [ "$EUID" -ne 0 ]; then
+  echo "ERROR: you need to run this as root"
+  exit 1
+fi
+
 # LVM JBOD or LVM RAID0 or mdadm RAID0
 
 lvcreate_striped_flags=''
