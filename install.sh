@@ -15,8 +15,6 @@ install_ucode_intel='' # intel cpu ucode, leave empty for `no`
 
 minimal_install='' # minimal install, used for debugging, leave empty for `no`
 
-DISTRO_NAME=SEXlinux$RANDOM
-
 # you want the `arch-install-scripts` package installed
 
 # resources
@@ -26,9 +24,9 @@ DISTRO_NAME=SEXlinux$RANDOM
 # https://blog.bjdean.id.au/2020/10/md-software-raid-and-lvm-logical-volume-management/#pvcreate
 # (most important, almost solved my problem singlehandedly) https://www.serveradminz.com/blog/installation-of-arch-linux-using-software-raid/
 
-# TODO wtf cancer shit, try and use 512 if possible
-#BOOT_PARTITION_SIZE=512MiB
-BOOT_PARTITION_SIZE=1GiB
+DISTRO_NAME=SEXlinux$RANDOM
+
+BOOT_PARTITION_SIZE=512MiB
 
 SWAP_FILE=/swapfile$RANDOM
 
