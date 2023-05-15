@@ -488,8 +488,8 @@ pkg_install grub efibootmgr dosfstools os-prober mtools openssh
 	#
 	# uncomment "#GRUB_ENABLE_CRYPTODISK=y"
 
-aur_install downgrade
-chroot_run downgrade --version # make sure it's installed
+#aur_install downgrade
+#chroot_run downgrade --version # make sure it's installed
 #chroot_run downgrade --ala-only --ignore always grub=2:2.06.r456.g65bc45963-1
 
 # install grub
