@@ -13,7 +13,7 @@ use_intel='' # intel video drivers, leave empty for `no`
 install_ucode_amd='1' # amd cpu ucode, leave empty for `no`
 install_ucode_intel='' # intel cpu ucode, leave empty for `no`
 
-minimal_install='1' # minimal install, used for debugging, leave empty for `no`
+minimal_install='' # minimal install, used for debugging, leave empty for `no`
 
 use_grub='' # leave empty for `no`
 # does not work with mdadm raid0 since the new update (confirmed not working 2023-05-19)
