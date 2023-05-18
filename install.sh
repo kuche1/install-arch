@@ -250,7 +250,7 @@ set_up_aur_helper(){
 	# install paru if not already installed
 	(cat << EOF
 set -e
-paru --version && exit
+paru --version 2> /dev/null && exit
 cd /tmp
 su me -c bash
 git clone https://aur.archlinux.org/paru-bin.git
@@ -283,6 +283,12 @@ if [ "$EUID" -ne 0 ]; then
   echo "ERROR: you need to run this as root"
   exit 1
 fi
+
+# tell the user not to fuck up
+
+echo "NOTE: make sure you have set the installer's options up; you can do this by editing the installer and chaning the settings at the beginning of the file"
+echo "press enter"
+read tmp
 
 # LVM JBOD or LVM RAID0 or mdadm RAID0
 
@@ -422,6 +428,7 @@ genfstab -U -p /mnt >> /mnt/etc/fstab
 pacstrap /mnt base
 
 log "starting installation"
+log "distro id is $DISTRO_ID"
 
 fix_pacman_config
 
@@ -467,7 +474,6 @@ echo "root:${user_password}" | chroot_run chpasswd
 
 chroot_run useradd -m -g users -G wheel me
 echo "me:${user_password}" | chroot_run chpasswd
-	# TODO this fails with error `user not known to the underlying authentication module`
 
 config_visudo
 
