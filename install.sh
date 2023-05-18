@@ -528,56 +528,33 @@ if [ "$use_grub" != "" ]; then # use grub
 
 else # use systemd-boot
 
-# 	chroot_run bootctl --path=/boot/ install
-
-# 	chroot_run 'echo timeout 15 > /boot/EFI/loader.conf'
-
-# 	(cat << EOF
-# title Arch Linux (linux)
-# linux /vmlinuz-linux-zem
-# initrd /amd-ucode.img
-# initrd /initramfs-linux-zen.img
-# options root=PARTUUID=e0238f7f-97e2-4b60-b9b8-1082df473560 rw rootfstype=ext4
-# EOF
-# 	)
-
-	# echo "set up the shit"
-	# chroot_run bash
-
-# 	(cat << EOF
-# title SEXlinux (linux-zen)
-# linux /vmlinuz-linux-zen
-# initrd /amd-ucode.img
-# initrd /initramfs-linux-zen.img
-# options root=/dev/mapper/${lvm_group}-myRootVol rw
-# EOF
-# 	) | chroot_run ...
-
 	chroot_run bootctl --path=/boot/ install
 
 	chroot_run bash -c 'echo timeout 8 > /boot/loader/loader.conf'
 
-	systemd_boot_distro_config_file=/boot/loader/entries/SEXlinux.conf
+	# systemd_boot_distro_config_file=/boot/loader/entries/SEXlinux.conf
 
-	chroot_run bash -c "echo title SEXlinux > $systemd_boot_distro_config_file"
-	chroot_run bash -c "echo linux /vmlinuz-linux-zen >> $systemd_boot_distro_config_file"
+	# chroot_run bash -c "echo title SEXlinux > $systemd_boot_distro_config_file"
+	# chroot_run bash -c "echo linux /vmlinuz-linux-zen >> $systemd_boot_distro_config_file"
 
-	test "$install_ucode_amd" != "" && chroot_run bash -c "echo initrd /amd-ucode.img >> $systemd_boot_distro_config_file"
-	test "$install_ucode_intel" != "" && chroot_run bash -c "echo initrd /intel-ucode.img >> $systemd_boot_distro_config_file"
+	# test "$install_ucode_amd" != "" && chroot_run bash -c "echo initrd /amd-ucode.img >> $systemd_boot_distro_config_file"
+	# test "$install_ucode_intel" != "" && chroot_run bash -c "echo initrd /intel-ucode.img >> $systemd_boot_distro_config_file"
 
-	chroot_run bash -c "echo initrd /initramfs-linux-zen.img >> $systemd_boot_distro_config_file"
+	# chroot_run bash -c "echo initrd /initramfs-linux-zen.img >> $systemd_boot_distro_config_file"
 
 	# if both are on, something went wrong
-	test "$lvm_group" != "" && chroot_run bash -c "echo options root=/dev/mapper/${lvm_group}-myRootVol rw >> $systemd_boot_distro_config_file"
-	test "$mdadm_device" != "" && chroot_run bash -c "echo options root=$mdadm_device rw >> $systemd_boot_distro_config_file"
+	# test "$lvm_group" != "" && chroot_run bash -c "echo options root=/dev/mapper/${lvm_group}-myRootVol rw >> $systemd_boot_distro_config_file"
+	# test "$mdadm_device" != "" && chroot_run bash -c "echo options root=$mdadm_device rw >> $systemd_boot_distro_config_file"
 
-# 	cat << EOF > /mnt/boot/loader/entries/SEXlinux-zen.conf
-# title SEXlinux (linux-zen)
-# linux /vmlinuz-linux-zen
-# initrd /amd-ucode.img
-# initrd /initramfs-linux-zen.img
-# options root=/dev/mapper/${lvm_group}-myRootVol rw
-# EOF
+	cat << EOF > /mnt/boot/loader/entries/SEXlinux-zen.conf
+title SEXlinux (linux-zen)
+linux /vmlinuz-linux-zen
+$(test "$install_ucode_amd" != "" && echo initrd /amd-ucode.img)
+$(test "$install_ucode_intel" != "" && echo initrd /intel-ucode.img)
+initrd /initramfs-linux-zen.img
+$(test "$lvm_group" != "" && echo options root=/dev/mapper/${lvm_group}-myRootVol rw)
+$(test "$mdadm_device" != "" && echo options root=$mdadm_device rw)
+EOF
 
 fi
 
