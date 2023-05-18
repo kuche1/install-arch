@@ -13,7 +13,7 @@ use_intel='' # intel video drivers, leave empty for `no`
 install_ucode_amd='1' # amd cpu ucode, leave empty for `no`
 install_ucode_intel='' # intel cpu ucode, leave empty for `no`
 
-minimal_install='' # minimal install, used for debugging, leave empty for `no`
+minimal_install='1' # minimal install, used for debugging, leave empty for `no`
 
 # you want the `arch-install-scripts` package installed
 
@@ -359,7 +359,7 @@ mkfs.fat -F32 ${boot_partition}
 
 if [ $use_lvm == 1 ]; then
 
-	export lvm_group=myVolGr
+	export lvm_group=myVolGr$RANDOM
 
 	# activate
 	for part in ${data_partitions}; do
