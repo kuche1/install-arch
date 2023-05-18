@@ -15,6 +15,9 @@ install_ucode_intel='' # intel cpu ucode, leave empty for `no`
 
 minimal_install='1' # minimal install, used for debugging, leave empty for `no`
 
+use_grub='' # leave empty for `no`
+# does not work with mdadm raid0
+
 # you want the `arch-install-scripts` package installed
 
 # resources
@@ -48,6 +51,7 @@ on_exit(){
 		read tmp
 
 		umount /mnt/boot/efi || true
+		umount /mnt/boot || true
 		umount /mnt || true
 
 		test "$lvm_group" != "" && {
@@ -64,6 +68,7 @@ on_exit(){
 	}
 
 	umount /mnt/boot/efi || true
+	umount /mnt/boot || true
 	umount /mnt || true
 
 	echo "Check \`$INSTALL_LOG_FILE\` for the install logs"
@@ -393,8 +398,14 @@ else # mdadm
 
 fi
 
-mkdir -p /mnt/boot/efi
-mount ${boot_partition} /mnt/boot/efi
+if [ "$use_grub" != "" ]; then # grub
+	mkdir -p /mnt/boot/efi
+	mount ${boot_partition} /mnt/boot/efi
+else # systemd-boot
+	# systemd-boot requires you to mount the f32 part in `/boot`
+	mkdir -p /mnt/boot
+	mount ${boot_partition} /mnt/boot
+fi
 
 mkdir /mnt/etc
 
@@ -474,33 +485,101 @@ echo '127.0.1.1 navi.localdomain navi' >> /etc/hosts
 EOF
 ) | chroot_run bash
 
-pkg_install grub efibootmgr dosfstools os-prober mtools openssh
+# cpu ucode
+if [ "$install_ucode_amd" != "" ]; then
+	pkg_install amd-ucode
+fi
+if [ "$install_ucode_intel" != "" ]; then
+	pkg_install intel-ucode
+fi
+
+##### bootloader
+
+pkg_install efibootmgr dosfstools os-prober mtools openssh
 # os-prober -> if multiple OS-es
 
-# seems like all of this is needed only if u use encryption
-	#micro /etc/default/grub
-	# change GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet"
-	#
-	# to GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 cryptdevice=/dev/sda2:myVolGr:allow-discards"
-	# to GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 cryptdevice=/dev/sdb2:myVolGr:allow-discards"
-	#
-	# uncomment "#GRUB_ENABLE_CRYPTODISK=y"
+if [ "$use_grub" != "" ]; then # use grub
+	pkg_install grub
 
-#aur_install downgrade
-#chroot_run downgrade --version # make sure it's installed
-#chroot_run downgrade --ala-only --ignore always grub=2:2.06.r456.g65bc45963-1
+	# seems like all of this is needed only if u use encryption
+		#micro /etc/default/grub
+		# change GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet"
+		#
+		# to GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 cryptdevice=/dev/sda2:myVolGr:allow-discards"
+		# to GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 cryptdevice=/dev/sdb2:myVolGr:allow-discards"
+		#
+		# uncomment "#GRUB_ENABLE_CRYPTODISK=y"
 
-# install grub
-chroot_run grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="$DISTRO_NAME" --recheck
-#chroot_run grub-mkconfig -o /boot/grub/grub.cfg
-# grub settings
-chroot_run sed -i -z 's%\nGRUB_TIMEOUT=5\n%\nGRUB_TIMEOUT=1\n%' /etc/default/grub
-# TODO make `quiet` into `noquiet`
-    # sudo_replace_string(GRUB_CONF_PATH,# TODO fix if not the first item
-    #     '\nGRUB_CMDLINE_LINUX_DEFAULT="quiet ',
-    #     '\nGRUB_CMDLINE_LINUX_DEFAULT="noquiet ')
-# update-grub
-chroot_run grub-mkconfig -o /boot/grub/grub.cfg
+	#aur_install downgrade
+	#chroot_run downgrade --version # make sure it's installed
+	#chroot_run downgrade --ala-only --ignore always grub=2:2.06.r456.g65bc45963-1
+
+	# install grub
+	chroot_run grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="$DISTRO_NAME" --recheck
+	#chroot_run grub-mkconfig -o /boot/grub/grub.cfg
+	# grub settings
+	chroot_run sed -i -z 's%\nGRUB_TIMEOUT=5\n%\nGRUB_TIMEOUT=1\n%' /etc/default/grub
+	# TODO make `quiet` into `noquiet`
+		# sudo_replace_string(GRUB_CONF_PATH,# TODO fix if not the first item
+		#     '\nGRUB_CMDLINE_LINUX_DEFAULT="quiet ',
+		#     '\nGRUB_CMDLINE_LINUX_DEFAULT="noquiet ')
+	# update-grub
+	chroot_run grub-mkconfig -o /boot/grub/grub.cfg
+
+else # use systemd-boot
+
+# 	chroot_run bootctl --path=/boot/ install
+
+# 	chroot_run 'echo timeout 15 > /boot/EFI/loader.conf'
+
+# 	(cat << EOF
+# title Arch Linux (linux)
+# linux /vmlinuz-linux-zem
+# initrd /amd-ucode.img
+# initrd /initramfs-linux-zen.img
+# options root=PARTUUID=e0238f7f-97e2-4b60-b9b8-1082df473560 rw rootfstype=ext4
+# EOF
+# 	)
+
+	# echo "set up the shit"
+	# chroot_run bash
+
+# 	(cat << EOF
+# title SEXlinux (linux-zen)
+# linux /vmlinuz-linux-zen
+# initrd /amd-ucode.img
+# initrd /initramfs-linux-zen.img
+# options root=/dev/mapper/${lvm_group}-myRootVol rw
+# EOF
+# 	) | chroot_run ...
+
+	chroot_run bootctl --path=/boot/ install
+
+	chroot_run bash -c 'echo timeout 8 > /boot/loader/loader.conf'
+
+	systemd_boot_distro_config_file=/boot/loader/entries/SEXlinux.conf
+
+	chroot_run bash -c "echo title SEXlinux > $systemd_boot_distro_config_file"
+	chroot_run bash -c "echo linux /vmlinuz-linux-zen >> $systemd_boot_distro_config_file"
+
+	test "$install_ucode_amd" != "" && chroot_run bash -c "echo initrd /amd-ucode.img >> $systemd_boot_distro_config_file"
+	test "$install_ucode_intel" != "" && chroot_run bash -c "echo initrd /intel-ucode.img >> $systemd_boot_distro_config_file"
+
+	chroot_run bash -c "echo initrd /initramfs-linux-zen.img >> $systemd_boot_distro_config_file"
+
+	# if both are on, something went wrong
+	test "$lvm_group" != "" && chroot_run bash -c "echo options root=/dev/mapper/${lvm_group}-myRootVol rw >> $systemd_boot_distro_config_file"
+	test "$mdadm_device" != "" && chroot_run bash -c "echo options root=$mdadm_device rw >> $systemd_boot_distro_config_file"
+
+# 	cat << EOF > /mnt/boot/loader/entries/SEXlinux-zen.conf
+# title SEXlinux (linux-zen)
+# linux /vmlinuz-linux-zen
+# initrd /amd-ucode.img
+# initrd /initramfs-linux-zen.img
+# options root=/dev/mapper/${lvm_group}-myRootVol rw
+# EOF
+
+fi
 
 if [ "$minimal_install" != "" ]; then
 	exit 0
@@ -545,14 +624,6 @@ chroot_run git config --global interactive.diffFilter delta --color-only
 chroot_run git config --global delta.navigate true
 chroot_run git config --global merge.conflictstyle diff3
 chroot_run git config --global diff.colorMoved default
-
-# cpu ucode
-if [ "$install_ucode_amd" != "" ]; then
-	pkg_install amd-ucode
-fi
-if [ "$install_ucode_intel" != "" ]; then
-	pkg_install intel-ucode
-fi
 
 # video drivers
 
