@@ -530,21 +530,7 @@ else # use systemd-boot
 
 	chroot_run bootctl --path=/boot/ install
 
-	chroot_run bash -c 'echo timeout 8 > /boot/loader/loader.conf'
-
-	# systemd_boot_distro_config_file=/boot/loader/entries/SEXlinux.conf
-
-	# chroot_run bash -c "echo title SEXlinux > $systemd_boot_distro_config_file"
-	# chroot_run bash -c "echo linux /vmlinuz-linux-zen >> $systemd_boot_distro_config_file"
-
-	# test "$install_ucode_amd" != "" && chroot_run bash -c "echo initrd /amd-ucode.img >> $systemd_boot_distro_config_file"
-	# test "$install_ucode_intel" != "" && chroot_run bash -c "echo initrd /intel-ucode.img >> $systemd_boot_distro_config_file"
-
-	# chroot_run bash -c "echo initrd /initramfs-linux-zen.img >> $systemd_boot_distro_config_file"
-
-	# if both are on, something went wrong
-	# test "$lvm_group" != "" && chroot_run bash -c "echo options root=/dev/mapper/${lvm_group}-myRootVol rw >> $systemd_boot_distro_config_file"
-	# test "$mdadm_device" != "" && chroot_run bash -c "echo options root=$mdadm_device rw >> $systemd_boot_distro_config_file"
+	chroot_run bash -c 'echo timeout 6 > /boot/loader/loader.conf'
 
 	cat << EOF > /mnt/boot/loader/entries/SEXlinux-zen.conf
 title SEXlinux (linux-zen)
