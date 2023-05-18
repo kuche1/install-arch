@@ -553,7 +553,7 @@ $(test "$install_ucode_amd" != "" && echo initrd /amd-ucode.img)
 $(test "$install_ucode_intel" != "" && echo initrd /intel-ucode.img)
 initrd /initramfs-linux-zen.img
 $(test "$lvm_group" != "" && echo options root=/dev/mapper/${lvm_group}-myRootVol rw)
-$(test "$mdadm_device" != "" && echo options root=$mdadm_device rw)
+$(test "$mdadm_device" != "" && echo options root=${mdadm_device}p1 rw)
 EOF
 
 fi
