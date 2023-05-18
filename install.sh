@@ -16,7 +16,7 @@ install_ucode_intel='' # intel cpu ucode, leave empty for `no`
 minimal_install='1' # minimal install, used for debugging, leave empty for `no`
 
 use_grub='' # leave empty for `no`
-# does not work with mdadm raid0
+# does not work with mdadm raid0 since the new update (confirmed not working 2023-05-19)
 
 # you want the `arch-install-scripts` package installed
 
@@ -27,11 +27,13 @@ use_grub='' # leave empty for `no`
 # https://blog.bjdean.id.au/2020/10/md-software-raid-and-lvm-logical-volume-management/#pvcreate
 # (most important, almost solved my problem singlehandedly) https://www.serveradminz.com/blog/installation-of-arch-linux-using-software-raid/
 
-DISTRO_NAME=SEXlinux$RANDOM
+DISTRO_ID=$RANDOM
+
+DISTRO_NAME=SEXlinux$DISTRO_ID
 
 BOOT_PARTITION_SIZE=512MiB
 
-SWAP_FILE=/swapfile$RANDOM
+SWAP_FILE=/swapfile$DISTRO_ID
 
 INSTALL_LOG_FILE=/install-error-log
 
@@ -127,6 +129,7 @@ get_block_device(){
 		>&2 lsblk
 		>&2 echo
 
+		>&2 echo "Already used devices: \`$already_used_block_devices\`"
 		>&2 printf "$prompt"
 
 		test "$allow_none" == "1" && {
@@ -154,7 +157,7 @@ get_block_device(){
 		}
 
 		# check if device already used
-		if [[ "$already_used_block_devices" == *" $block_device "* ]]; then
+		if [[ "$already_used_block_devices" == *"$block_device"* ]]; then
 			>&2 echo "invalid input: device already used: \`$block_device\`"
 			>&2 echo 'press enter'
 			read tmp
@@ -364,7 +367,7 @@ mkfs.fat -F32 ${boot_partition}
 
 if [ $use_lvm == 1 ]; then
 
-	export lvm_group=myVolGr$RANDOM
+	export lvm_group=myVolGr$DISTRO_ID
 
 	# activate
 	for part in ${data_partitions}; do
@@ -384,7 +387,7 @@ if [ $use_lvm == 1 ]; then
 
 else # mdadm
 
-	export mdadm_device=/dev/md0
+	export mdadm_device=/dev/md$DISTRO_ID
 
 	mdadm -Cv -R $mdadm_device -l0 -n$number_of_disks $data_partitions
 		# `-R` supresses confirmation prompt
