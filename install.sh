@@ -536,6 +536,7 @@ if [ "$use_grub" != "" ]; then # use grub
 	chroot_run grub-mkconfig -o /boot/grub/grub.cfg
 
 else # use systemd-boot
+	aur_install systemd-boot-pacman-hook
 
 	chroot_run bootctl --path=/boot/ install
 
