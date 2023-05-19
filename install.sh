@@ -99,9 +99,8 @@ su me -c bash
 set -e
 set -o xtrace
 echo "$user_password" | sudo -S echo gaysex
-#echo "$user_password" | sudo -S -v
-paru --sudoloop --noconfirm -S --needed $@
-#echo "$user_password" | paru --sudoloop --noconfirm -S --needed $@
+#paru --sudoloop --noconfirm -S --needed $@
+paru --noconfirm -S --needed $@
 EOF
 	) | chroot_run bash || {
 		log "failed to install AUR package(s) \`$@\`"
