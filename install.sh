@@ -91,7 +91,7 @@ pkg_install(){
 }
 
 aur_install(){
-	# TODO this asks for passwd when running as non-root
+	# TODO this fails more often than not
 	(cat << EOF
 set -e
 set -o xtrace
