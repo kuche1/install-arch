@@ -17,6 +17,7 @@ minimal_install='' # minimal install, used for debugging, leave empty for `no`
 
 use_grub='' # leave empty for `no`
 # does not work with mdadm raid0 since the new update (confirmed not working 2023-05-19)
+# this is the 2nd time grub has fucked something up
 
 # you want the `arch-install-scripts` package installed
 
@@ -539,7 +540,7 @@ else # use systemd-boot
 
 	chroot_run bootctl --path=/boot/ install
 
-	chroot_run bash -c 'echo timeout 6 > /boot/loader/loader.conf'
+	chroot_run bash -c 'echo timeout 4 > /boot/loader/loader.conf'
 
 	cat << EOF > /mnt/boot/loader/entries/SEXlinux-zen.conf
 title SEXlinux (linux-zen)
@@ -689,8 +690,8 @@ pkg_install mpv # video player
 	aur_install thorium-browser-bin # chromium browser (for the sites that require that)
 pkg_install obs-studio # screen sharing
 # latex editor
-	pkg_install gummi # works, but no features
-	pkg_install texworks # can navigate from editor to PDF and reverse, but refuses to compile from time to tike
+	#pkg_install gummi # works, but no features
+	#pkg_install texworks # can navigate from editor to PDF and reverse, but refuses to compile from time to tike
 	pkg_install texmaker # best
 	pkg_install texlive-lang # non-english support
 aur_install flashpoint-launcher-bin # flash games
