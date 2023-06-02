@@ -540,7 +540,8 @@ else # use systemd-boot
 
 	chroot_run bootctl --path=/boot/ install
 
-	chroot_run bash -c 'echo timeout 2 > /boot/loader/loader.conf'
+	# setting this value too low might not give enough time for your sata controller to init (if you are using one)
+	chroot_run bash -c 'echo timeout 3 > /boot/loader/loader.conf'
 
 	cat << EOF > /mnt/boot/loader/entries/SEXlinux-zen.conf
 title SEXlinux (linux-zen)
