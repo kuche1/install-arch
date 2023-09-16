@@ -541,7 +541,8 @@ else # use systemd-boot
 	chroot_run bootctl --path=/boot/ install
 
 	# setting this value too low might not give enough time for your sata controller to init (if you are using one)
-	chroot_run bash -c 'echo timeout 3 > /boot/loader/loader.conf'
+	# alternatively, you can set it to 1 and wait it out
+	chroot_run bash -c 'echo timeout 1 > /boot/loader/loader.conf'
 
 	cat << EOF > /mnt/boot/loader/entries/SEXlinux-zen.conf
 title SEXlinux (linux-zen)
@@ -701,7 +702,7 @@ aur_install flashpoint-launcher-bin # flash games
 	pkg_install discord
 
 # file manager
-pkg_install thunar thunar-archive-plugin gvfs
+pkg_install thunar thunar-archive-plugin thunar-volman gvfs gvfs-mtp libmtp
 pkg_install tumbler # thumbnails
 	pkg_install ffmpegthumbnailer # video
 	pkg_install poppler-glib # pdf
